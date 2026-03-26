@@ -76,6 +76,19 @@ function mainHtml(): string {
     .scrollbar-thin::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
     .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
     #timerCanvas { display: block; }
+    .btn-add-tsum { background: rgba(52,152,219,0.15); border: 1.5px dashed rgba(52,152,219,0.6); color: #5dade2; border-radius: 12px; padding: 10px 16px; cursor: pointer; transition: all 0.3s; width: 100%; font-size: 0.9rem; }
+    .btn-add-tsum:hover { background: rgba(52,152,219,0.25); border-color: #5dade2; color: #fff; }
+    .new-tsum-badge { display: inline-block; background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; font-size: 0.65rem; font-weight: bold; padding: 1px 6px; border-radius: 8px; margin-left: 4px; vertical-align: middle; }
+    .radio-group { display: flex; flex-direction: column; gap: 8px; }
+    .radio-option { display: flex; align-items: center; gap-10px; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer; transition: all 0.3s; }
+    .radio-option:hover { background: rgba(255,255,255,0.07); }
+    .radio-option.selected { background: rgba(52,152,219,0.15); border-color: #3498db; }
+    .series-select-search { position: relative; }
+    .series-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #1a1a2e; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; max-height: 200px; overflow-y: auto; z-index: 100; margin-top: 4px; }
+    .series-dropdown-item { padding: 10px 14px; cursor: pointer; transition: background 0.2s; font-size: 0.9rem; }
+    .series-dropdown-item:hover { background: rgba(255,255,255,0.1); }
+    .series-dropdown-item.highlighted { background: rgba(52,152,219,0.2); color: #5dade2; }
+    .input-field::placeholder { color: rgba(255,255,255,0.35); }
   </style>
 </head>
 <body>
@@ -154,6 +167,13 @@ function mainHtml(): string {
             </div>
             <!-- Tsum list -->
             <div id="tsumList" class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto scrollbar-thin"></div>
+
+            <!-- Add new tsum button -->
+            <div class="mt-3">
+              <button class="btn-add-tsum" onclick="openAddTsumModal()">
+                <i class="fas fa-plus-circle mr-2"></i>リストにないツムを追加する
+              </button>
+            </div>
 
             <!-- Selected tsum & skill level -->
             <div id="selectedTsumInfo" class="hidden mt-4 p-4 rounded-xl" style="background: rgba(155,89,182,0.15); border: 1px solid rgba(155,89,182,0.3);">
@@ -407,6 +427,107 @@ function mainHtml(): string {
           </div>
         </div>
       </main>
+    </div>
+  </div>
+
+  <!-- Add Tsum Modal -->
+  <div id="addTsumModal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width:480px;">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-white">
+            <i class="fas fa-plus-circle text-blue-400 mr-2"></i>ツムを追加
+          </h2>
+          <p class="text-xs text-gray-400 mt-1">登録後すぐにリストに反映されます</p>
+        </div>
+        <button onclick="closeAddTsumModal()" class="text-gray-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <!-- ツム名 -->
+      <div class="mb-5">
+        <label class="block text-sm font-bold text-gray-200 mb-2">
+          <i class="fas fa-star text-pink-400 mr-1"></i>ツム名 <span class="text-red-400">*</span>
+        </label>
+        <input type="text" id="newTsumName"
+          class="input-field text-lg"
+          placeholder="例: ヴィランズミッキー"
+          oninput="validateAddTsumForm()"
+          autocomplete="off">
+        <p class="text-xs text-gray-500 mt-1">ゲーム内に表示される正式名称で入力してください</p>
+      </div>
+
+      <!-- 登場作品 -->
+      <div class="mb-6">
+        <label class="block text-sm font-bold text-gray-200 mb-2">
+          <i class="fas fa-film text-purple-400 mr-1"></i>登場作品 <span class="text-red-400">*</span>
+        </label>
+
+        <!-- 既存作品 or 新規作品 切替 -->
+        <div class="flex gap-2 mb-3">
+          <button id="modeExisting" onclick="setSeriesMode('existing')"
+            class="flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all border"
+            style="background:rgba(52,152,219,0.2);border-color:#3498db;color:#5dade2;">
+            <i class="fas fa-list mr-1"></i>既存の作品から選ぶ
+          </button>
+          <button id="modeNew" onclick="setSeriesMode('new')"
+            class="flex-1 py-2 px-3 rounded-lg text-sm font-bold transition-all border"
+            style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);">
+            <i class="fas fa-plus mr-1"></i>新しい作品を追加
+          </button>
+        </div>
+
+        <!-- 既存作品選択（検索付き） -->
+        <div id="seriesExistingMode">
+          <div class="series-select-search">
+            <input type="text" id="seriesSearchInput"
+              class="input-field"
+              placeholder="🔍 作品名で絞り込み..."
+              oninput="filterSeriesDropdown()"
+              onfocus="showSeriesDropdown()"
+              autocomplete="off">
+            <div id="seriesDropdown" class="series-dropdown hidden scrollbar-thin"></div>
+          </div>
+          <div id="selectedSeriesDisplay" class="hidden mt-2 p-2 rounded-lg flex items-center gap-2"
+            style="background:rgba(155,89,182,0.15);border:1px solid rgba(155,89,182,0.3);">
+            <i class="fas fa-check-circle text-purple-400 text-sm"></i>
+            <span class="text-sm text-white font-bold" id="selectedSeriesName"></span>
+            <button onclick="clearSeriesSelection()" class="ml-auto text-gray-400 hover:text-white text-xs">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- 新規作品入力 -->
+        <div id="seriesNewMode" class="hidden">
+          <input type="text" id="newSeriesName"
+            class="input-field"
+            placeholder="例: ウィッシュ、ストレンジ・ワールド"
+            oninput="validateAddTsumForm()"
+            autocomplete="off">
+          <p class="text-xs text-gray-500 mt-1">ゲーム内表記に合わせて入力してください</p>
+        </div>
+      </div>
+
+      <!-- エラー表示 -->
+      <div id="addTsumError" class="hidden mb-4 p-3 rounded-lg text-sm text-red-300"
+        style="background:rgba(231,76,60,0.15);border:1px solid rgba(231,76,60,0.3);">
+        <i class="fas fa-exclamation-circle mr-1"></i>
+        <span id="addTsumErrorMsg"></span>
+      </div>
+
+      <!-- ボタン -->
+      <div class="flex gap-3">
+        <button onclick="closeAddTsumModal()" class="btn-secondary flex-1">
+          キャンセル
+        </button>
+        <button id="submitAddTsumBtn" onclick="submitAddTsum()"
+          class="btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+          disabled>
+          <i class="fas fa-plus mr-2"></i>追加する
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1067,6 +1188,189 @@ function mainHtml(): string {
         </div>
       \`).join('') || '<div class="text-gray-400 text-sm text-center py-4">ユーザーがいません</div>'
     } catch(e) {}
+  }
+
+  // ===========================
+  // ADD TSUM MODAL
+  // ===========================
+  let addTsumSeriesMode = 'existing'  // 'existing' | 'new'
+  let addTsumSelectedSeriesId = null
+  let addTsumSelectedSeriesName = ''
+
+  function openAddTsumModal() {
+    addTsumSeriesMode = 'existing'
+    addTsumSelectedSeriesId = null
+    addTsumSelectedSeriesName = ''
+    document.getElementById('newTsumName').value = ''
+    document.getElementById('newSeriesName').value = ''
+    document.getElementById('seriesSearchInput').value = ''
+    document.getElementById('selectedSeriesDisplay').classList.add('hidden')
+    document.getElementById('seriesDropdown').classList.add('hidden')
+    document.getElementById('addTsumError').classList.add('hidden')
+    document.getElementById('submitAddTsumBtn').disabled = true
+    setSeriesMode('existing')
+    document.getElementById('addTsumModal').classList.remove('hidden')
+    setTimeout(() => document.getElementById('newTsumName').focus(), 100)
+  }
+
+  function closeAddTsumModal() {
+    document.getElementById('addTsumModal').classList.add('hidden')
+    document.getElementById('seriesDropdown').classList.add('hidden')
+  }
+
+  function setSeriesMode(mode) {
+    addTsumSeriesMode = mode
+    addTsumSelectedSeriesId = null
+    addTsumSelectedSeriesName = ''
+
+    const btnEx = document.getElementById('modeExisting')
+    const btnNew = document.getElementById('modeNew')
+    const exMode = document.getElementById('seriesExistingMode')
+    const newMode = document.getElementById('seriesNewMode')
+
+    const activeStyle = 'background:rgba(52,152,219,0.2);border-color:#3498db;color:#5dade2;'
+    const inactiveStyle = 'background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);'
+
+    if (mode === 'existing') {
+      btnEx.style.cssText = activeStyle
+      btnNew.style.cssText = inactiveStyle
+      exMode.classList.remove('hidden')
+      newMode.classList.add('hidden')
+      document.getElementById('seriesSearchInput').value = ''
+      document.getElementById('selectedSeriesDisplay').classList.add('hidden')
+    } else {
+      btnNew.style.cssText = activeStyle
+      btnEx.style.cssText = inactiveStyle
+      newMode.classList.remove('hidden')
+      exMode.classList.add('hidden')
+      setTimeout(() => document.getElementById('newSeriesName').focus(), 50)
+    }
+    validateAddTsumForm()
+  }
+
+  function filterSeriesDropdown() {
+    const val = document.getElementById('seriesSearchInput').value.toLowerCase()
+    addTsumSelectedSeriesId = null
+    addTsumSelectedSeriesName = ''
+    document.getElementById('selectedSeriesDisplay').classList.add('hidden')
+    showSeriesDropdown(val)
+    validateAddTsumForm()
+  }
+
+  // シリーズドロップダウン用に絞り込み結果をキャッシュ
+  let _filteredSeriesCache = []
+
+  function showSeriesDropdown(filter) {
+    const q = (filter !== undefined ? filter : document.getElementById('seriesSearchInput').value.toLowerCase())
+    _filteredSeriesCache = state.series.filter(s => !q || s.name.toLowerCase().includes(q)).slice(0, 30)
+    const el = document.getElementById('seriesDropdown')
+    if (!_filteredSeriesCache.length) { el.classList.add('hidden'); return }
+    el.innerHTML = _filteredSeriesCache.map((s, idx) =>
+      \`<div class="series-dropdown-item" data-idx="\${idx}">\${s.name}</div>\`
+    ).join('')
+    // イベント委譲でクリック処理
+    el.onclick = (e) => {
+      const item = e.target.closest('[data-idx]')
+      if (!item) return
+      const s = _filteredSeriesCache[parseInt(item.dataset.idx)]
+      if (s) selectSeriesFromDropdown(s.id, s.name)
+    }
+    el.classList.remove('hidden')
+  }
+
+  function selectSeriesFromDropdown(id, name) {
+    addTsumSelectedSeriesId = id
+    addTsumSelectedSeriesName = name
+    document.getElementById('seriesSearchInput').value = ''
+    document.getElementById('seriesDropdown').classList.add('hidden')
+    document.getElementById('selectedSeriesName').textContent = name
+    document.getElementById('selectedSeriesDisplay').classList.remove('hidden')
+    validateAddTsumForm()
+  }
+
+  function clearSeriesSelection() {
+    addTsumSelectedSeriesId = null
+    addTsumSelectedSeriesName = ''
+    document.getElementById('selectedSeriesDisplay').classList.add('hidden')
+    document.getElementById('seriesSearchInput').value = ''
+    validateAddTsumForm()
+  }
+
+  // ドロップダウン外クリックで閉じる
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('seriesDropdown')
+    const searchInput = document.getElementById('seriesSearchInput')
+    if (dropdown && searchInput && !dropdown.contains(e.target) && e.target !== searchInput) {
+      dropdown.classList.add('hidden')
+    }
+  })
+
+  function validateAddTsumForm() {
+    const name = document.getElementById('newTsumName')?.value?.trim()
+    let seriesOk = false
+    if (addTsumSeriesMode === 'existing') {
+      seriesOk = !!addTsumSelectedSeriesId
+    } else {
+      seriesOk = !!(document.getElementById('newSeriesName')?.value?.trim())
+    }
+    const btn = document.getElementById('submitAddTsumBtn')
+    if (btn) btn.disabled = !(name && seriesOk)
+  }
+
+  async function submitAddTsum() {
+    const name = document.getElementById('newTsumName').value.trim()
+    const errEl = document.getElementById('addTsumError')
+    const errMsg = document.getElementById('addTsumErrorMsg')
+
+    let payload = { name }
+    if (addTsumSeriesMode === 'existing') {
+      if (!addTsumSelectedSeriesId) {
+        errMsg.textContent = '作品を選択してください'
+        errEl.classList.remove('hidden')
+        return
+      }
+      payload.series_id = addTsumSelectedSeriesId
+    } else {
+      const newSeries = document.getElementById('newSeriesName').value.trim()
+      if (!newSeries) {
+        errMsg.textContent = '作品名を入力してください'
+        errEl.classList.remove('hidden')
+        return
+      }
+      payload.series_name_new = newSeries
+    }
+
+    const btn = document.getElementById('submitAddTsumBtn')
+    btn.disabled = true
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>追加中...'
+    errEl.classList.add('hidden')
+
+    try {
+      const res = await axios.post('/api/tsums', payload)
+      const newTsum = res.data.tsum
+
+      // ローカルstateに追加
+      state.tsums.push(newTsum)
+      // シリーズが新規の場合はstateにも追加
+      if (!state.series.find(s => s.id === newTsum.series_id)) {
+        state.series.push({ id: newTsum.series_id, name: newTsum.series_name, sort_order: 200 })
+      }
+
+      closeAddTsumModal()
+      // 追加したツムを即選択
+      filterTsums()
+      renderSeriesChips()
+      populateAdminTsumSelect()
+      await selectTsum(newTsum.id)
+
+      showToast(\`「\${newTsum.name}」を追加しました！\`, 'success')
+    } catch(e) {
+      const msg = e.response?.data?.error || '追加に失敗しました'
+      errMsg.textContent = msg
+      errEl.classList.remove('hidden')
+      btn.disabled = false
+      btn.innerHTML = '<i class="fas fa-plus mr-2"></i>追加する'
+    }
   }
 
   // ===========================

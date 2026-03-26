@@ -34,6 +34,57 @@ apiRoutes.get('/tsums', async (c) => {
   return c.json({ tsums: result.results })
 })
 
+// ツム追加（ユーザー申請）
+apiRoutes.post('/tsums', async (c) => {
+  const { env } = c
+  const body = await c.req.json()
+  const { name, series_id, series_name_new } = body
+
+  if (!name || !name.trim()) {
+    return c.json({ error: 'ツム名を入力してください' }, 400)
+  }
+
+  let targetSeriesId = series_id ? parseInt(series_id) : null
+
+  // 「新しい作品を追加」が選択された場合
+  if (!targetSeriesId && series_name_new && series_name_new.trim()) {
+    // 既存チェック
+    const existing = await env.DB.prepare(
+      'SELECT id FROM series WHERE name = ?'
+    ).bind(series_name_new.trim()).first() as any
+    if (existing) {
+      targetSeriesId = existing.id
+    } else {
+      const res = await env.DB.prepare(
+        'INSERT INTO series (name, sort_order) VALUES (?, 200)'
+      ).bind(series_name_new.trim()).run()
+      targetSeriesId = res.meta.last_row_id as number
+    }
+  }
+
+  if (!targetSeriesId) {
+    return c.json({ error: '登場作品を選択または入力してください' }, 400)
+  }
+
+  // 重複チェック（同シリーズ内で同名）
+  const dup = await env.DB.prepare(
+    'SELECT id FROM tsums WHERE name = ? AND series_id = ?'
+  ).bind(name.trim(), targetSeriesId).first()
+  if (dup) {
+    return c.json({ error: '同じ作品に同名のツムが既に登録されています' }, 409)
+  }
+
+  const result = await env.DB.prepare(
+    'INSERT INTO tsums (series_id, name, max_skill_level, sort_order) VALUES (?, ?, 6, 999)'
+  ).bind(targetSeriesId, name.trim()).run()
+
+  const newTsum = await env.DB.prepare(
+    'SELECT t.*, s.name as series_name FROM tsums t JOIN series s ON t.series_id = s.id WHERE t.id = ?'
+  ).bind(result.meta.last_row_id).first()
+
+  return c.json({ tsum: newTsum, success: true }, 201)
+})
+
 // ============================================================
 // USERS
 // ============================================================
