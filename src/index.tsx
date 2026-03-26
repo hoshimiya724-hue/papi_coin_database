@@ -89,6 +89,22 @@ function mainHtml(): string {
     .series-dropdown-item:hover { background: rgba(255,255,255,0.1); }
     .series-dropdown-item.highlighted { background: rgba(52,152,219,0.2); color: #5dade2; }
     .input-field::placeholder { color: rgba(255,255,255,0.35); }
+    /* Item toggle */
+    .item-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); transition: all 0.25s; }
+    .item-toggle-row.active-5to4 { background: rgba(155,89,182,0.18); border-color: rgba(155,89,182,0.5); }
+    .item-toggle-row.active-coin { background: rgba(243,156,18,0.18); border-color: rgba(243,156,18,0.5); }
+    .toggle-switch { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track { position: absolute; inset: 0; border-radius: 13px; background: rgba(255,255,255,0.15); cursor: pointer; transition: background 0.25s; }
+    .toggle-track::after { content:''; position: absolute; width: 20px; height: 20px; border-radius: 50%; top: 3px; left: 3px; background: white; transition: transform 0.25s; }
+    .toggle-switch input:checked + .toggle-track { background: #9b59b6; }
+    .toggle-switch input:checked + .toggle-track::after { transform: translateX(22px); }
+    .toggle-5to4 .toggle-switch input:checked + .toggle-track { background: #9b59b6; }
+    .toggle-coin .toggle-switch input:checked + .toggle-track { background: #f39c12; }
+    .item-label { display: flex; align-items: center; gap: 8px; }
+    .item-badge-5to4 { display:inline-block; background: linear-gradient(135deg,#9b59b6,#8e44ad); color:white; font-size:0.7rem; font-weight:bold; padding:2px 8px; border-radius:8px; }
+    .item-badge-coin { display:inline-block; background: linear-gradient(135deg,#f39c12,#e67e22); color:white; font-size:0.7rem; font-weight:bold; padding:2px 8px; border-radius:8px; }
+    .item-badge-none { display:inline-block; background: rgba(255,255,255,0.15); color:rgba(255,255,255,0.5); font-size:0.7rem; font-weight:bold; padding:2px 8px; border-radius:8px; }
   </style>
 </head>
 <body>
@@ -198,16 +214,52 @@ function mainHtml(): string {
           <!-- Step 2: Before Coins -->
           <div class="card p-6" id="step2">
             <h2 class="text-xl font-bold text-white mb-4">
-              <span class="text-pink-400">Step 2</span> 開始前のコイン数を入力
+              <span class="text-pink-400">Step 2</span> 開始前の設定
             </h2>
-            <div class="flex gap-4 items-end">
+            <div class="flex gap-4 items-end mb-4">
               <div class="flex-1">
                 <label class="block text-sm text-gray-300 mb-2">所持コイン数</label>
                 <input type="number" id="coinsBeforeInput" class="input-field text-xl font-bold" placeholder="0" min="0" oninput="validateStep2()">
               </div>
               <div class="text-3xl pb-2">🪙</div>
             </div>
-            <button onclick="startSession()" id="startBtn" class="btn-primary w-full mt-4 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+
+            <!-- アイテム選択 -->
+            <div class="mb-4">
+              <label class="block text-sm text-gray-300 mb-2"><i class="fas fa-magic mr-1 text-purple-400"></i>使用アイテム</label>
+              <div class="space-y-2">
+                <!-- 5→4アイテム -->
+                <div class="item-toggle-row toggle-5to4" id="toggleRow5to4">
+                  <div class="item-label">
+                    <span class="text-lg">🃏</span>
+                    <div>
+                      <div class="text-sm font-bold text-white">5→4アイテム</div>
+                      <div class="text-xs text-gray-400">ツムの種類を5→4種類に減らす</div>
+                    </div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="toggle5to4" onchange="onToggleItem('5to4', this.checked)">
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+                <!-- コインアイテム -->
+                <div class="item-toggle-row toggle-coin" id="toggleRowCoin">
+                  <div class="item-label">
+                    <span class="text-lg">🪙</span>
+                    <div>
+                      <div class="text-sm font-bold text-white">コインアイテム</div>
+                      <div class="text-xs text-gray-400">獲得コインを増加させる</div>
+                    </div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="toggleCoin" onchange="onToggleItem('coin', this.checked)">
+                    <span class="toggle-track"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <button onclick="startSession()" id="startBtn" class="btn-primary w-full mt-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
               <i class="fas fa-play mr-2"></i>30分計測スタート
             </button>
           </div>
@@ -252,6 +304,10 @@ function mainHtml(): string {
                 <span>プレイ時間</span>
                 <span class="text-white font-bold" id="displayDuration">-</span>
               </div>
+              <div class="flex justify-between text-sm text-gray-400 mt-1">
+                <span>使用アイテム</span>
+                <span id="displayItems" class="flex gap-1"></span>
+              </div>
             </div>
             <div class="flex gap-4 items-end mb-4">
               <div class="flex-1">
@@ -279,6 +335,7 @@ function mainHtml(): string {
               <div class="text-5xl mb-3">🎉</div>
               <h2 class="text-2xl font-bold text-white">記録完了！</h2>
               <p class="text-gray-400 text-sm mt-1" id="resultTsumName"></p>
+              <div id="resultItemBadges" class="flex justify-center gap-2 mt-2"></div>
             </div>
             <div class="grid grid-cols-2 gap-3 mb-6">
               <div class="stat-card text-center">
@@ -572,7 +629,9 @@ function mainHtml(): string {
       coinsBefore: 0,
       startTime: null,
       timerInterval: null,
-      actualDuration: 30
+      actualDuration: 30,
+      item5to4: false,
+      itemCoin: false
     }
   }
 
@@ -815,9 +874,18 @@ function mainHtml(): string {
   // ===========================
   function validateStep2() {
     const hasT = !!state.selectedTsum
-    const hasC = parseInt(document.getElementById('coinsBeforeInput')?.value || 0) >= 0
     const coin = document.getElementById('coinsBeforeInput')?.value
     document.getElementById('startBtn').disabled = !(hasT && coin !== '' && coin !== undefined)
+  }
+
+  function onToggleItem(type, checked) {
+    if (type === '5to4') {
+      state.session.item5to4 = checked
+      document.getElementById('toggleRow5to4').classList.toggle('active-5to4', checked)
+    } else {
+      state.session.itemCoin = checked
+      document.getElementById('toggleRowCoin').classList.toggle('active-coin', checked)
+    }
   }
 
   function startSession() {
@@ -900,6 +968,13 @@ function mainHtml(): string {
   function showStep4() {
     document.getElementById('displayCoinsBefore').textContent = fmtCoins(state.session.coinsBefore)
     document.getElementById('displayDuration').textContent = state.session.actualDuration + '分'
+    // アイテム表示
+    const itemEl = document.getElementById('displayItems')
+    const badges = []
+    if (state.session.item5to4) badges.push('<span class="item-badge-5to4">5→4</span>')
+    if (state.session.itemCoin) badges.push('<span class="item-badge-coin">コイン</span>')
+    if (!badges.length) badges.push('<span class="item-badge-none">なし</span>')
+    itemEl.innerHTML = badges.join('')
     document.getElementById('step4').classList.remove('hidden')
   }
 
@@ -926,7 +1001,9 @@ function mainHtml(): string {
         coins_after: coinsAfter,
         coins_earned: coinsEarned,
         duration_minutes: state.session.actualDuration,
-        note
+        note,
+        item_5to4: state.session.item5to4 ? 1 : 0,
+        item_coin: state.session.itemCoin ? 1 : 0
       })
 
       // Show result
@@ -941,6 +1018,12 @@ function mainHtml(): string {
       document.getElementById('result1hour').textContent = fmtCoins(Math.round(per60))
       document.getElementById('result1min').textContent = fmtCoins(Math.round(per1))
       document.getElementById('resultSL').textContent = 'SL' + state.selectedSkillLevel
+
+      // アイテムバッジ（結果画面）
+      const resultBadges = []
+      if (state.session.item5to4) resultBadges.push('<span class="item-badge-5to4">5→4あり</span>')
+      if (state.session.itemCoin) resultBadges.push('<span class="item-badge-coin">コインあり</span>')
+      document.getElementById('resultItemBadges').innerHTML = resultBadges.join('')
 
       // Load updated averages
       await loadUpdatedAverages()
@@ -975,7 +1058,7 @@ function mainHtml(): string {
     clearInterval(state.session.timerInterval)
     state.selectedTsum = null
     state.selectedSkillLevel = 1
-    state.session = { coinsBefore: 0, startTime: null, timerInterval: null, actualDuration: 30 }
+    state.session = { coinsBefore: 0, startTime: null, timerInterval: null, actualDuration: 30, item5to4: false, itemCoin: false }
     document.getElementById('step2').classList.remove('hidden')
     document.getElementById('step3').classList.add('hidden')
     document.getElementById('step4').classList.add('hidden')
@@ -986,6 +1069,11 @@ function mainHtml(): string {
     document.getElementById('coinsAfterInput').value = ''
     document.getElementById('noteInput').value = ''
     document.getElementById('earnedPreview').classList.add('hidden')
+    // トグルリセット
+    const t54 = document.getElementById('toggle5to4')
+    const tc = document.getElementById('toggleCoin')
+    if (t54) { t54.checked = false; document.getElementById('toggleRow5to4').classList.remove('active-5to4') }
+    if (tc) { tc.checked = false; document.getElementById('toggleRowCoin').classList.remove('active-coin') }
     state.selectedSeriesId = null
     filterTsums()
     renderSeriesChips()
@@ -1043,11 +1131,13 @@ function mainHtml(): string {
         return \`
           <div class="stat-card p-3">
             <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-medium text-white text-sm">\${s.tsum_name}</span>
                 <span class="skill-badge text-xs">SL\${s.skill_level}</span>
+                \${s.item_5to4 ? '<span class="item-badge-5to4">5→4</span>' : ''}
+                \${s.item_coin ? '<span class="item-badge-coin">コイン</span>' : ''}
               </div>
-              <span class="text-xs text-gray-400">\${date}</span>
+              <span class="text-xs text-gray-400 flex-shrink-0">\${date}</span>
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
               <div>

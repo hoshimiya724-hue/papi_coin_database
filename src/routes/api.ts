@@ -137,7 +137,8 @@ apiRoutes.post('/sessions', async (c) => {
   const {
     user_id, tsum_id, skill_level,
     coins_before, coins_after, coins_earned,
-    duration_minutes, note
+    duration_minutes, note,
+    item_5to4, item_coin
   } = body
 
   if (!user_id || !tsum_id || !skill_level) {
@@ -146,12 +147,13 @@ apiRoutes.post('/sessions', async (c) => {
 
   const result = await env.DB.prepare(`
     INSERT INTO coin_sessions 
-    (user_id, tsum_id, skill_level, coins_before, coins_after, coins_earned, duration_minutes, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (user_id, tsum_id, skill_level, coins_before, coins_after, coins_earned, duration_minutes, note, item_5to4, item_coin)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user_id, tsum_id, skill_level,
     coins_before, coins_after, coins_earned,
-    duration_minutes || 30, note || null
+    duration_minutes || 30, note || null,
+    item_5to4 ? 1 : 0, item_coin ? 1 : 0
   ).run()
 
   return c.json({ id: result.meta.last_row_id, success: true })
