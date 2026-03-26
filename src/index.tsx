@@ -89,6 +89,9 @@ function mainHtml(): string {
     .series-dropdown-item:hover { background: rgba(255,255,255,0.1); }
     .series-dropdown-item.highlighted { background: rgba(52,152,219,0.2); color: #5dade2; }
     .input-field::placeholder { color: rgba(255,255,255,0.35); }
+    .tag-badge { display:inline-block; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.75); font-size:0.65rem; padding:1px 7px; border-radius:10px; white-space:nowrap; }
+    .tag-badge.box { background:rgba(243,156,18,0.18); border-color:rgba(243,156,18,0.4); color:#f8c471; }
+    .tag-badge.limited { background:rgba(231,76,60,0.18); border-color:rgba(231,76,60,0.4); color:#f1948a; }
     /* Item toggle */
     .item-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); transition: all 0.25s; }
     .item-toggle-row.active-5to4 { background: rgba(155,89,182,0.18); border-color: rgba(155,89,182,0.5); }
@@ -767,8 +770,16 @@ function mainHtml(): string {
   function renderSeriesChips() {
     const el = document.getElementById('seriesChips')
     if (!el) return
-    const activeSeries = [...new Set(state.tsums.map(t => t.series_id))]
-    const filtered = state.series.filter(s => activeSeries.includes(s.id))
+    // tagsから全series_idを収集（tsum_tags対応）
+    const activeSeries = new Set()
+    state.tsums.forEach(t => {
+      if (t.tags && t.tags.length) {
+        t.tags.forEach(tag => activeSeries.add(tag.id))
+      } else {
+        activeSeries.add(t.series_id)
+      }
+    })
+    const filtered = state.series.filter(s => activeSeries.has(s.id))
     el.innerHTML = '<div class="series-chip ' + (!state.selectedSeriesId ? 'selected' : '') + '" onclick="selectSeries(null)">すべて</div>' +
       filtered.map(s => \`<div class="series-chip \${state.selectedSeriesId === s.id ? 'selected' : ''}" onclick="selectSeries(\${s.id})">\${s.name}</div>\`).join('')
   }
@@ -782,7 +793,9 @@ function mainHtml(): string {
   function filterTsums() {
     const search = document.getElementById('tsumSearch')?.value?.toLowerCase() || ''
     state.filteredTsums = state.tsums.filter(t => {
-      const matchSeries = !state.selectedSeriesId || t.series_id === state.selectedSeriesId
+      const matchSeries = !state.selectedSeriesId || (
+        t.tags && t.tags.some(tag => tag.id === state.selectedSeriesId)
+      ) || t.series_id === state.selectedSeriesId
       const matchSearch = !search || t.name.toLowerCase().includes(search)
       return matchSeries && matchSearch
     })
@@ -792,12 +805,22 @@ function mainHtml(): string {
   function renderTsumList() {
     const el = document.getElementById('tsumList')
     if (!el) return
-    el.innerHTML = state.filteredTsums.map(t => \`
-      <div class="tsum-card \${state.selectedTsum?.id === t.id ? 'selected' : ''}" onclick="selectTsum(\${t.id})">
-        <div class="font-medium text-white text-sm">\${t.name}</div>
-        <div class="text-xs text-gray-400 mt-1">\${getSeriesName(t.series_id)}</div>
-      </div>
-    \`).join('') || '<div class="text-gray-400 text-sm col-span-2 text-center py-4">ツムが見つかりません</div>'
+    el.innerHTML = state.filteredTsums.map(t => {
+      const tagBadges = (t.tags && t.tags.length)
+        ? t.tags.map(tag => {
+            const isBox = tag.name.includes('BOX')
+            const isLimited = tag.name.includes('期間限定')
+            const cls = isLimited ? 'tag-badge limited' : isBox ? 'tag-badge box' : 'tag-badge'
+            return \`<span class="\${cls}">\${tag.name}</span>\`
+          }).join(' ')
+        : \`<span class="tag-badge">\${getSeriesName(t.series_id)}</span>\`
+      return \`
+        <div class="tsum-card \${state.selectedTsum?.id === t.id ? 'selected' : ''}" onclick="selectTsum(\${t.id})">
+          <div class="font-medium text-white text-sm">\${t.name}</div>
+          <div class="flex flex-wrap gap-1 mt-1">\${tagBadges}</div>
+        </div>
+      \`
+    }).join('') || '<div class="text-gray-400 text-sm col-span-2 text-center py-4">ツムが見つかりません</div>'
   }
 
   function getSeriesName(id) {

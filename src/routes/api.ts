@@ -23,15 +23,55 @@ apiRoutes.get('/series', async (c) => {
 apiRoutes.get('/tsums', async (c) => {
   const { env } = c
   const seriesId = c.req.query('series_id')
-  let query = 'SELECT t.*, s.name as series_name FROM tsums t JOIN series s ON t.series_id = s.id'
+
+  // ツム一覧とタグをJOINして一括取得（GROUP_CONCATでタグをまとめる）
+  let query: string
   const params: any[] = []
+
   if (seriesId) {
-    query += ' WHERE t.series_id = ?'
+    // 特定シリーズのツムのみ（tsum_tagsで絞り込み）
+    query = `
+      SELECT t.id, t.name, t.series_id, t.max_skill_level, t.sort_order,
+             s.name as series_name,
+             GROUP_CONCAT(ts2.id || ':' || ts2.name, '||') as tags_raw
+      FROM tsums t
+      JOIN series s ON t.series_id = s.id
+      JOIN tsum_tags tt_filter ON tt_filter.tsum_id = t.id AND tt_filter.series_id = ?
+      LEFT JOIN tsum_tags tt ON tt.tsum_id = t.id
+      LEFT JOIN series ts2 ON ts2.id = tt.series_id
+      GROUP BY t.id
+      ORDER BY t.name
+    `
     params.push(parseInt(seriesId))
+  } else {
+    // 全ツム
+    query = `
+      SELECT t.id, t.name, t.series_id, t.max_skill_level, t.sort_order,
+             s.name as series_name,
+             GROUP_CONCAT(ts2.id || ':' || ts2.name, '||') as tags_raw
+      FROM tsums t
+      JOIN series s ON t.series_id = s.id
+      LEFT JOIN tsum_tags tt ON tt.tsum_id = t.id
+      LEFT JOIN series ts2 ON ts2.id = tt.series_id
+      GROUP BY t.id
+      ORDER BY t.name
+    `
   }
-  query += ' ORDER BY s.sort_order, t.sort_order, t.name'
+
   const result = await env.DB.prepare(query).bind(...params).all()
-  return c.json({ tsums: result.results })
+  const tsums = (result.results as any[]).map((t: any) => {
+    // tags_raw を "id:name||id:name" 形式からオブジェクト配列に変換
+    const tags = t.tags_raw
+      ? t.tags_raw.split('||').map((s: string) => {
+          const [id, ...nameParts] = s.split(':')
+          return { id: parseInt(id), name: nameParts.join(':') }
+        })
+      : []
+    const { tags_raw, ...rest } = t
+    return { ...rest, tags }
+  })
+
+  return c.json({ tsums })
 })
 
 // ツム追加（ユーザー申請）
@@ -66,21 +106,40 @@ apiRoutes.post('/tsums', async (c) => {
     return c.json({ error: '登場作品を選択または入力してください' }, 400)
   }
 
-  // 重複チェック（同シリーズ内で同名）
-  const dup = await env.DB.prepare(
-    'SELECT id FROM tsums WHERE name = ? AND series_id = ?'
-  ).bind(name.trim(), targetSeriesId).first()
-  if (dup) {
-    return c.json({ error: '同じ作品に同名のツムが既に登録されています' }, 409)
-  }
+  // 同名ツムが既存かチェック
+  const existing = await env.DB.prepare(
+    'SELECT id FROM tsums WHERE name = ?'
+  ).bind(name.trim()).first() as any
 
-  const result = await env.DB.prepare(
-    'INSERT INTO tsums (series_id, name, max_skill_level, sort_order) VALUES (?, ?, 6, 999)'
-  ).bind(targetSeriesId, name.trim()).run()
+  let tsumId: number
+
+  if (existing) {
+    // 既存ツムにタグ（series_id）を追加
+    tsumId = existing.id
+    const dupTag = await env.DB.prepare(
+      'SELECT id FROM tsum_tags WHERE tsum_id = ? AND series_id = ?'
+    ).bind(tsumId, targetSeriesId).first()
+    if (dupTag) {
+      return c.json({ error: '同じ作品に同名のツムが既に登録されています' }, 409)
+    }
+    await env.DB.prepare(
+      'INSERT INTO tsum_tags (tsum_id, series_id) VALUES (?, ?)'
+    ).bind(tsumId, targetSeriesId).run()
+  } else {
+    // 新規ツム登録
+    const result = await env.DB.prepare(
+      'INSERT INTO tsums (series_id, name, max_skill_level, sort_order) VALUES (?, ?, 6, 999)'
+    ).bind(targetSeriesId, name.trim()).run()
+    tsumId = result.meta.last_row_id as number
+    // tsum_tagsにも登録
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO tsum_tags (tsum_id, series_id) VALUES (?, ?)'
+    ).bind(tsumId, targetSeriesId).run()
+  }
 
   const newTsum = await env.DB.prepare(
     'SELECT t.*, s.name as series_name FROM tsums t JOIN series s ON t.series_id = s.id WHERE t.id = ?'
-  ).bind(result.meta.last_row_id).first()
+  ).bind(tsumId).first()
 
   return c.json({ tsum: newTsum, success: true }, 201)
 })
